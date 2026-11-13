@@ -1,0 +1,9 @@
+data/*.csv
+data/*.parquet
+__pycache__/
+*.pyc
+.pytest_cache/
+oof/*.npy
+test_preds/*.npy
+*.egg-info/
+.ipynb_checkpoints/
