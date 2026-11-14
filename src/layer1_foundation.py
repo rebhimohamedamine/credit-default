@@ -98,7 +98,11 @@ def fit_predict_oof_foundation(model_name: str, X: pd.DataFrame, y: pd.Series, X
         assert set(context_idx).issubset(set(train_idx))
         assert not (set(context_idx) & set(val_idx))
 
-        model = ModelClass(device=device, random_state=seed)
+        # kv_cache pre-computes the context's attention state once in fit(), so each
+        # chunked predict_proba call below reuses it instead of re-embedding the full
+        # context from scratch on every chunk (tabicl only; tabpfn has no such option).
+        extra_kwargs = {'kv_cache': True} if model_name == 'tabicl' else {}
+        model = ModelClass(device=device, random_state=seed, **extra_kwargs)
         model.fit(X.iloc[context_idx], y.iloc[context_idx])
 
         oof[val_idx] = _predict_proba_batched(model, X.iloc[val_idx])
