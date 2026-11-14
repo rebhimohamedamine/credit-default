@@ -75,14 +75,19 @@ def _fit_predict_fold_tree(model_name, X_train, y_train, X_val, X_test, cat_cols
         _, enc_test = smoothed_target_encode(X_train[col], y_train, X_test[col])
         X_train[col], X_val[col], X_test[col] = enc_train, enc_val, enc_test
 
+    # params (e.g. a tuned random_state from seed-averaging) must be able to override
+    # these defaults, so merge into a dict rather than passing both as literal kwargs -
+    # Python raises "got multiple values for keyword argument" if a key appears in both.
     if model_name == 'lightgbm':
         import lightgbm as lgb
         device = 'gpu' if device_cfg.get('cuda_available') else 'cpu'
-        model = lgb.LGBMClassifier(random_state=42, verbose=-1, device_type=device, **(params or {}))
+        kwargs = {'random_state': 42, 'verbose': -1, 'device_type': device, **(params or {})}
+        model = lgb.LGBMClassifier(**kwargs)
     elif model_name == 'xgboost':
         import xgboost as xgb
         device = 'cuda' if device_cfg.get('cuda_available') else 'cpu'
-        model = xgb.XGBClassifier(random_state=42, device=device, **(params or {}))
+        kwargs = {'random_state': 42, 'device': device, **(params or {})}
+        model = xgb.XGBClassifier(**kwargs)
     else:
         raise ValueError(model_name)
 
@@ -90,9 +95,9 @@ def _fit_predict_fold_tree(model_name, X_train, y_train, X_val, X_test, cat_cols
         model.fit(X_train, y_train)
     except Exception:
         if model_name == 'lightgbm':
-            model = lgb.LGBMClassifier(random_state=42, verbose=-1, device_type='cpu', **(params or {}))
+            model = lgb.LGBMClassifier(**{**kwargs, 'device_type': 'cpu'})
         else:
-            model = xgb.XGBClassifier(random_state=42, device='cpu', **(params or {}))
+            model = xgb.XGBClassifier(**{**kwargs, 'device': 'cpu'})
         model.fit(X_train, y_train)
 
     return (model.predict_proba(X_val)[:, 1], model.predict_proba(X_test)[:, 1])
@@ -102,13 +107,13 @@ def _fit_predict_fold_catboost(X_train, y_train, X_val, X_test, cat_cols, device
     from catboost import CatBoostClassifier
 
     task_type = 'GPU' if device_cfg.get('cuda_available') else 'CPU'
-    model = CatBoostClassifier(random_state=42, verbose=0, task_type=task_type,
-                                cat_features=cat_cols, **(params or {}))
+    kwargs = {'random_state': 42, 'verbose': 0, 'task_type': task_type, 'cat_features': cat_cols,
+              **(params or {})}
+    model = CatBoostClassifier(**kwargs)
     try:
         model.fit(X_train, y_train)
     except Exception:
-        model = CatBoostClassifier(random_state=42, verbose=0, task_type='CPU',
-                                    cat_features=cat_cols, **(params or {}))
+        model = CatBoostClassifier(**{**kwargs, 'task_type': 'CPU'})
         model.fit(X_train, y_train)
     return (model.predict_proba(X_val)[:, 1], model.predict_proba(X_test)[:, 1])
 
@@ -127,16 +132,22 @@ def _fit_predict_fold_sklearn(model_name, X_train, y_train, X_val, X_test, numer
 
     if model_name == 'mlp':
         from sklearn.neural_network import MLPClassifier
-        clf = MLPClassifier(hidden_layer_sizes=(64, 32), early_stopping=True, random_state=42, **(params or {}))
+        kwargs = {'hidden_layer_sizes': (64, 32), 'early_stopping': True, 'random_state': 42,
+                  **(params or {})}
+        clf = MLPClassifier(**kwargs)
     elif model_name == 'logreg':
         from sklearn.linear_model import LogisticRegression
-        clf = LogisticRegression(max_iter=1000, random_state=42, **(params or {}))
+        kwargs = {'max_iter': 1000, 'random_state': 42, **(params or {})}
+        clf = LogisticRegression(**kwargs)
     elif model_name == 'rf':
         from sklearn.ensemble import RandomForestClassifier
-        clf = RandomForestClassifier(class_weight='balanced', random_state=42, n_jobs=-1, **(params or {}))
+        kwargs = {'class_weight': 'balanced', 'random_state': 42, 'n_jobs': -1, **(params or {})}
+        clf = RandomForestClassifier(**kwargs)
     elif model_name == 'extratrees':
         from sklearn.ensemble import ExtraTreesClassifier
-        clf = ExtraTreesClassifier(class_weight='balanced', bootstrap=False, random_state=42, n_jobs=-1, **(params or {}))
+        kwargs = {'class_weight': 'balanced', 'bootstrap': False, 'random_state': 42, 'n_jobs': -1,
+                  **(params or {})}
+        clf = ExtraTreesClassifier(**kwargs)
     else:
         raise ValueError(model_name)
 
