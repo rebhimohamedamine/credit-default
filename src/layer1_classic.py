@@ -8,6 +8,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+from src.clean import CAT_COLS as LOW_CARDINALITY_CAT_COLS
+
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_NAMES = ['lightgbm', 'xgboost', 'catboost', 'mlp', 'logreg', 'rf', 'extratrees']
 
@@ -111,8 +113,17 @@ def _fit_predict_fold_catboost(X_train, y_train, X_val, X_test, cat_cols, device
     return (model.predict_proba(X_val)[:, 1], model.predict_proba(X_test)[:, 1])
 
 
+def _restrict_to_low_cardinality(cat_cols: list[str]) -> list[str]:
+    # Spec: RF/ExtraTrees (and MLP/LogReg, which share this preprocessing) one-hot only the
+    # 5 original low-cardinality categoricals. Engineered high-cardinality combo columns
+    # (device_channel, auth_channel, device_card, category_channel) are dropped here -
+    # LightGBM/XGBoost (target encoding) and CatBoost (native cat_features) still use them.
+    return [c for c in cat_cols if c in LOW_CARDINALITY_CAT_COLS]
+
+
 def _fit_predict_fold_sklearn(model_name, X_train, y_train, X_val, X_test, numeric_cols, cat_cols, params):
-    pre = build_preprocessor(numeric_cols, cat_cols)
+    restricted_cat_cols = _restrict_to_low_cardinality(cat_cols)
+    pre = build_preprocessor(numeric_cols, restricted_cat_cols)
 
     if model_name == 'mlp':
         from sklearn.neural_network import MLPClassifier
