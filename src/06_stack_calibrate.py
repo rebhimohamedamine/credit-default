@@ -29,6 +29,19 @@ def load_oof_test_pred():
     return oof, test_pred, model_names
 
 
+def _prepare_feature_frame(df: pd.DataFrame, feat_names: list[str],
+                            categories: dict[str, pd.Index] | None = None) -> pd.DataFrame:
+    # LightGBM's sklearn wrapper rejects raw object/string dtypes outright; it only
+    # accepts int/float/bool or pandas 'category'. Casting to 'category' here (with a
+    # categories set shared between train and test) lets LightGBM use its native
+    # categorical handling and keeps train-fit and test-predict codes consistent.
+    out = df[feat_names].copy()
+    for col in out.select_dtypes(include=['object', 'category', 'string']).columns:
+        cats = categories[col] if categories else pd.Index(out[col].astype(str).unique())
+        out[col] = pd.Categorical(out[col].astype(str), categories=cats)
+    return out
+
+
 def top_raw_features(n: int = TOP_N_RAW_FEATURES) -> list[str]:
     params_path = ROOT / 'params' / 'lightgbm.json'
     train = pd.read_parquet(DATA_DIR / 'train_features.parquet')
@@ -47,6 +60,7 @@ def top_raw_features(n: int = TOP_N_RAW_FEATURES) -> list[str]:
 def main():
     oof, test_pred, model_names = load_oof_test_pred()
     train = pd.read_parquet(DATA_DIR / 'train_features.parquet')
+    test = pd.read_parquet(DATA_DIR / 'test_features.parquet')
     folds_df = pd.read_csv(ROOT / 'folds.csv')
     train = train.merge(folds_df, on='id', how='left')
     y = train['is_fraud'].astype(int)
@@ -55,7 +69,9 @@ def main():
     oof_matrix = np.column_stack([oof[name] for name in model_names])
 
     feat_names = top_raw_features()
-    extra_features = train[feat_names]
+    cat_cols = train[feat_names].select_dtypes(include=['object', 'category', 'string']).columns
+    categories = {col: pd.Index(pd.concat([train[col], test[col]]).astype(str).unique()) for col in cat_cols}
+    extra_features = _prepare_feature_frame(train, feat_names, categories)
 
     stack_oof, stack_model = fit_meta_model(oof_matrix, y, extra_features, folds)
     mean_oof = simple_mean_meta(oof_matrix)
@@ -96,8 +112,8 @@ def main():
     if best_name == 'stack' and all(name in test_pred for name in model_names):
         test_matrix = np.column_stack([test_pred[name] for name in model_names])
         test_meta_X = pd.DataFrame(test_matrix, columns=[f'm{i}' for i in range(test_matrix.shape[1])])
-        test = pd.read_parquet(DATA_DIR / 'test_features.parquet')
-        test_meta_X = pd.concat([test_meta_X, test[feat_names].reset_index(drop=True)], axis=1)
+        test_meta_X = pd.concat(
+            [test_meta_X, _prepare_feature_frame(test, feat_names, categories).reset_index(drop=True)], axis=1)
         test_stack_pred = stack_model.predict_proba(test_meta_X)[:, 1]
     elif all(name in test_pred for name in model_names):
         test_matrix = np.column_stack([test_pred[name] for name in model_names])
