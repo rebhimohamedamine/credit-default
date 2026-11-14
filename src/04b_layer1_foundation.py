@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 import time
 from pathlib import Path
@@ -37,10 +38,19 @@ def available_foundation_models() -> list[str]:
     models = []
     if importlib.util.find_spec('tabicl'):
         models.append('tabicl')
-    if importlib.util.find_spec('tabpfn'):
-        models.append('tabpfn')
-    else:
+    if not importlib.util.find_spec('tabpfn'):
         print('tabpfn not installed - skipping it. See REPORT.md for why.')
+    elif not os.environ.get('TABPFN_TOKEN'):
+        # TabPFN weights are gated behind a Prior Labs account: first use needs a
+        # browser login + license acceptance, then a TABPFN_TOKEN to skip that prompt.
+        # Without it, .fit() blocks forever waiting for interactive input on a
+        # non-interactive run (e.g. a Kaggle notebook), so skip rather than hang.
+        print('tabpfn installed but TABPFN_TOKEN is not set - skipping it to avoid '
+              'blocking on the interactive license prompt. See '
+              'https://docs.priorlabs.ai/how-to-access-gated-models to authorize, '
+              'then set TABPFN_TOKEN in the environment.')
+    else:
+        models.append('tabpfn')
     return models
 
 
