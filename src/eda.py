@@ -15,7 +15,7 @@ def _wilson_ci(successes: int, n: int, z: float = 1.96) -> tuple[float, float]:
 def fraud_rate_with_ci(df: pd.DataFrame, group_col: str, target_col: str = 'is_fraud') -> pd.DataFrame:
     grouped = df.groupby(group_col)[target_col].agg(['sum', 'count'])
     rows = []
-    for group, (successes, n) in grouped[['sum', 'count']].itertuples(index=True, name=None):
+    for group, successes, n in grouped[['sum', 'count']].itertuples(index=True, name=None):
         ci_low, ci_high = _wilson_ci(int(successes), int(n))
         rows.append({
             group_col: group,

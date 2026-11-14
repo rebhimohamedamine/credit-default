@@ -7,3 +7,4 @@ oof/*.npy
 test_preds/*.npy
 *.egg-info/
 .ipynb_checkpoints/
+catboost_info/

@@ -20,15 +20,24 @@ def build_stratified_context(X, y, max_context_size: int, seed: int = 42) -> np.
     y = np.asarray(y)
     pos_idx = np.where(y == 1)[0]
     neg_idx = np.where(y == 0)[0]
-
-    n_neg_keep = max(0, max_context_size - len(pos_idx))
     rng = np.random.default_rng(seed)
+
+    if len(neg_idx) > 0 and len(pos_idx) >= max_context_size:
+        # Positives alone would exhaust the budget, leaving zero negatives: a
+        # single-class context breaks in-context models (predict_proba collapses
+        # to one column). Reserve at least one negative slot. In normal fraud-rate
+        # data this branch never triggers since fraud is the rare class.
+        pos_keep = rng.choice(pos_idx, size=max_context_size - 1, replace=False)
+    else:
+        pos_keep = pos_idx
+
+    n_neg_keep = max(0, max_context_size - len(pos_keep))
     if n_neg_keep < len(neg_idx):
         neg_keep = rng.choice(neg_idx, size=n_neg_keep, replace=False)
     else:
         neg_keep = neg_idx
 
-    idx = np.concatenate([pos_idx, neg_keep])
+    idx = np.concatenate([pos_keep, neg_keep])
     rng.shuffle(idx)
     return idx
 

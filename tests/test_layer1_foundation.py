@@ -16,6 +16,16 @@ def test_stratified_context_respects_size_cap():
     assert len(idx) <= 500
 
 
+def test_stratified_context_keeps_both_classes_when_positives_exceed_cap():
+    # 111 positives, 89 negatives, cap of 50: positives alone exceed the cap.
+    y = np.array([1] * 111 + [0] * 89)
+    idx = build_stratified_context(np.zeros((200, 1)), y, max_context_size=50)
+    kept = y[idx]
+    assert (kept == 0).any(), 'context must never be single-class, even when positives exceed the cap'
+    assert (kept == 1).any()
+    assert len(idx) <= 50
+
+
 def test_foundation_oof_context_never_overlaps_its_own_validation_fold():
     rng = np.random.default_rng(0)
     X = pd.DataFrame({'amount_usd': rng.random(200)})
