@@ -15,6 +15,19 @@ MODEL_CLASSES = {
     'tabpfn': ('tabpfn', 'TabPFNClassifier'),
 }
 
+# predict_proba forwards the whole query batch through the model together with the
+# context, so its memory scales with query rows too (not just context rows). Chunking
+# the query avoids CUDA OOM when predicting on the full ~300k-row test set at once.
+PREDICT_BATCH_SIZE = 2_000
+
+
+def _predict_proba_batched(model, X: pd.DataFrame, batch_size: int = PREDICT_BATCH_SIZE) -> np.ndarray:
+    preds = np.empty(len(X))
+    for start in range(0, len(X), batch_size):
+        chunk = X.iloc[start:start + batch_size]
+        preds[start:start + len(chunk)] = model.predict_proba(chunk)[:, 1]
+    return preds
+
 
 def build_stratified_context(X, y, max_context_size: int, seed: int = 42) -> np.ndarray:
     y = np.asarray(y)
@@ -88,7 +101,7 @@ def fit_predict_oof_foundation(model_name: str, X: pd.DataFrame, y: pd.Series, X
         model = ModelClass(device=device, random_state=seed)
         model.fit(X.iloc[context_idx], y.iloc[context_idx])
 
-        oof[val_idx] = model.predict_proba(X.iloc[val_idx])[:, 1]
-        test_fold_preds[i] = model.predict_proba(X_test)[:, 1]
+        oof[val_idx] = _predict_proba_batched(model, X.iloc[val_idx])
+        test_fold_preds[i] = _predict_proba_batched(model, X_test)
 
     return oof, test_fold_preds.mean(axis=0)
