@@ -70,3 +70,15 @@ def test_rare_cat_threshold_computed_on_combined_train_and_test_not_train_alone(
     combined = pd.concat([train, test], ignore_index=True)
     out = add_features(combined, blocks=['rare_cat'])
     assert (out.loc[out['device_type'] == 'z', 'device_type_rare'] == 'z').all()
+
+
+def test_group_agg_count_and_stats_per_group():
+    df = pd.DataFrame({
+        'channel': ['a', 'a', 'a', 'b', 'b'],
+        'amount_usd': [10.0, 20.0, 30.0, 5.0, 7.0],
+    })
+    out = add_features(df, blocks=['group_agg'])
+    assert list(out['count_channel']) == [3, 3, 3, 2, 2]
+    assert list(out['amount_usd_median_channel']) == [20.0, 20.0, 20.0, 6.0, 6.0]
+    assert list(out['amount_usd_min_channel']) == [10.0, 10.0, 10.0, 5.0, 5.0]
+    assert list(out['amount_usd_max_channel']) == [30.0, 30.0, 30.0, 7.0, 7.0]

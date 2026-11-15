@@ -11,7 +11,18 @@ REMOTE_CHANNELS = ['Online', 'In-App']
 STRONG_AUTH = ['3D Secure', 'OTP']
 
 BLOCK_ORDER = ['amount', 'velocity', 'location', 'auth', 'device', 'merchant', 'profile', 'time', 'scam',
-               'stat2', 'rare_cat', 'cross']
+               'stat2', 'rare_cat', 'group_agg', 'cross']
+
+GROUP_AGG_GROUP_COLS = ['merchant_category', 'channel', 'device_type', 'card_type', 'age_bin']
+GROUP_AGG_VALUE_COLS = ['amount_usd', 'velocity_score']
+GROUP_AGG_STATS = ['median', 'min', 'max']
+
+
+def _group_agg_cols():
+    cols = [f'count_{g}' for g in GROUP_AGG_GROUP_COLS]
+    cols += [f'{v}_{s}_{g}' for g in GROUP_AGG_GROUP_COLS
+             for v in GROUP_AGG_VALUE_COLS for s in GROUP_AGG_STATS]
+    return cols
 
 FEATURE_BLOCKS = {
     'amount': ['amount_log', 'amount_to_balance', 'balance_after', 'drains_account',
@@ -35,6 +46,7 @@ FEATURE_BLOCKS = {
              'scam_x_ship_mismatch', 'ship_mismatch_remote_new'],
     'stat2': ['amount_sqrt', 'amount_bin', 'distance_sqrt', 'distance_bin', 'hours_since_last_txn_sqrt'],
     'rare_cat': [f'{c}_rare' for c in CAT_COLS],
+    'group_agg': _group_agg_cols(),
     'cross': ['red_flag_count', 'red_flags_x_amount', 'missing_count', 'iso_score'],
 }
 
@@ -230,6 +242,18 @@ def _add_rare_cat(df, threshold=0.01):
     return df
 
 
+def _add_group_agg(df):
+    group_cols = [c for c in GROUP_AGG_GROUP_COLS if c in df.columns]
+    value_cols = [c for c in GROUP_AGG_VALUE_COLS if c in df.columns]
+    for gcol in group_cols:
+        df[f'count_{gcol}'] = df.groupby(gcol)[gcol].transform('count')
+        for vcol in value_cols:
+            g = df.groupby(gcol)[vcol]
+            for stat in GROUP_AGG_STATS:
+                df[f'{vcol}_{stat}_{gcol}'] = g.transform(stat)
+    return df
+
+
 def _add_cross(df, base_cols):
     present_flags = [c for c in RED_FLAGS if c in df.columns]
     if present_flags:
@@ -270,6 +294,7 @@ _BLOCK_FUNCS = {
     'scam': _add_scam,
     'stat2': _add_stat2,
     'rare_cat': _add_rare_cat,
+    'group_agg': _add_group_agg,
 }
 
 
