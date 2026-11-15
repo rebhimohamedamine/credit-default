@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 
+from src.clean import CAT_COLS
+
 RED_FLAGS = [
     'is_foreign_transaction', 'is_new_merchant', 'used_vpn',
     'ip_country_mismatch', 'billing_shipping_mismatch', 'is_ai_generated_scam_attempt',
@@ -9,7 +11,7 @@ REMOTE_CHANNELS = ['Online', 'In-App']
 STRONG_AUTH = ['3D Secure', 'OTP']
 
 BLOCK_ORDER = ['amount', 'velocity', 'location', 'auth', 'device', 'merchant', 'profile', 'time', 'scam',
-               'stat2', 'cross']
+               'stat2', 'rare_cat', 'cross']
 
 FEATURE_BLOCKS = {
     'amount': ['amount_log', 'amount_to_balance', 'balance_after', 'drains_account',
@@ -32,6 +34,7 @@ FEATURE_BLOCKS = {
     'scam': ['scam_x_newmerchant', 'scam_x_amount', 'scam_with_strong_auth',
              'scam_x_ship_mismatch', 'ship_mismatch_remote_new'],
     'stat2': ['amount_sqrt', 'amount_bin', 'distance_sqrt', 'distance_bin', 'hours_since_last_txn_sqrt'],
+    'rare_cat': [f'{c}_rare' for c in CAT_COLS],
     'cross': ['red_flag_count', 'red_flags_x_amount', 'missing_count', 'iso_score'],
 }
 
@@ -217,6 +220,16 @@ def _add_stat2(df):
     return df
 
 
+def _add_rare_cat(df, threshold=0.01):
+    for col in CAT_COLS:
+        if col not in df.columns:
+            continue
+        freq = df[col].value_counts(normalize=True)
+        rare_mask = df[col].map(freq) < threshold
+        df[f'{col}_rare'] = df[col].mask(rare_mask, 'Other')
+    return df
+
+
 def _add_cross(df, base_cols):
     present_flags = [c for c in RED_FLAGS if c in df.columns]
     if present_flags:
@@ -256,6 +269,7 @@ _BLOCK_FUNCS = {
     'time': _add_time,
     'scam': _add_scam,
     'stat2': _add_stat2,
+    'rare_cat': _add_rare_cat,
 }
 
 

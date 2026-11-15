@@ -46,3 +46,27 @@ def test_stat2_bins_tolerate_heavily_duplicated_values():
     df = pd.DataFrame({'amount_usd': [5.0] * 97 + [10.0, 20.0, 30.0]})
     out = add_features(df, blocks=['stat2'])
     assert out['amount_bin'].notna().all()
+
+
+def test_rare_cat_collapses_categories_below_threshold():
+    df = pd.DataFrame({'device_type': ['common'] * 199 + ['rare']})
+    out = add_features(df, blocks=['rare_cat'])
+    assert out['device_type_rare'].iloc[-1] == 'Other'
+    assert (out['device_type_rare'].iloc[:-1] == 'common').all()
+
+
+def test_rare_cat_leaves_missing_values_as_missing():
+    df = pd.DataFrame({'device_type': ['common'] * 10 + [None]})
+    out = add_features(df, blocks=['rare_cat'])
+    assert pd.isna(out['device_type_rare'].iloc[-1])
+
+
+def test_rare_cat_threshold_computed_on_combined_train_and_test_not_train_alone():
+    # 'z' is 1/200 = 0.5% of train alone (below the 1% threshold), but test adds 50 more
+    # 'z' rows, making it 51/250 = 20.4% of the combined frame (above threshold). If the
+    # frequency were computed on train alone, 'z' would wrongly collapse to 'Other'.
+    train = pd.DataFrame({'device_type': ['common'] * 199 + ['z']})
+    test = pd.DataFrame({'device_type': ['z'] * 50})
+    combined = pd.concat([train, test], ignore_index=True)
+    out = add_features(combined, blocks=['rare_cat'])
+    assert (out.loc[out['device_type'] == 'z', 'device_type_rare'] == 'z').all()
