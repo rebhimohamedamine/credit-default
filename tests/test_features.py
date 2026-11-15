@@ -157,6 +157,25 @@ def test_digit_decomp_target_enc_columns_are_declared_for_every_digit_key():
     assert FEATURE_BLOCKS['digit_decomp'] == [f'{c}_target_enc' for c in _digit_key_cols()]
 
 
+def test_pair_interact_builds_all_six_combo_keys():
+    df = pd.DataFrame({
+        'merchant_category': ['Groceries'],
+        'channel': ['POS'],
+        'auth_method': ['PIN'],
+        'card_type': ['Visa'],
+    })
+    out = add_features(df, blocks=['pair_interact'])
+    assert out['merchant_category_x_channel'].iloc[0] == 'Groceries_POS'
+    assert out['auth_method_x_card_type'].iloc[0] == 'PIN_Visa'
+    added = set(out.columns) - set(df.columns)
+    assert added == set(FEATURE_BLOCKS['pair_interact'])
+
+
+def test_pair_interact_enc_target_enc_columns_are_declared_for_every_pair_key():
+    from src.features import _pair_interact_cols
+    assert FEATURE_BLOCKS['pair_interact_enc'] == [f'{c}_target_enc' for c in _pair_interact_cols()]
+
+
 def test_cross_missing_count_ignores_id_and_is_fraud():
     df = pd.DataFrame({
         'id': [1, 2],

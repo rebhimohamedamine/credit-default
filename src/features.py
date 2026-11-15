@@ -11,7 +11,17 @@ REMOTE_CHANNELS = ['Online', 'In-App']
 STRONG_AUTH = ['3D Secure', 'OTP']
 
 BLOCK_ORDER = ['amount', 'velocity', 'location', 'auth', 'device', 'merchant', 'profile', 'time', 'scam',
-               'stat2', 'rare_cat', 'group_agg', 'digit_keys', 'cross']
+               'stat2', 'rare_cat', 'group_agg', 'digit_keys', 'pair_interact', 'cross']
+
+# The 4 low-cardinality columns a public write-up on this exact competition (PCCF) used for
+# a small, targeted set of pairwise categorical interactions -- distinct from the 75 broad
+# hand-crafted interactions that measurably hurt in another write-up (see conversation).
+PAIR_INTERACT_COLS = ['merchant_category', 'channel', 'auth_method', 'card_type']
+
+
+def _pair_interact_cols():
+    from itertools import combinations
+    return [f'{a}_x_{b}' for a, b in combinations(PAIR_INTERACT_COLS, 2)]
 
 # This dataset (Kaggle Playground S6E11) is synthetically generated and quantized to
 # <=2 decimal places, leaving decimal-digit frequency spikes that plain thresholds on the
@@ -75,9 +85,11 @@ FEATURE_BLOCKS = {
     'rare_cat': [f'{c}_rare' for c in CAT_COLS],
     'group_agg': _group_agg_cols(),
     'digit_keys': _digit_key_cols(),
+    'pair_interact': _pair_interact_cols(),
     'cross': ['red_flag_count', 'red_flags_x_amount', 'missing_count', 'iso_score'] + _cross_group_stat_cols(),
     'target_enc': [f'{c}_target_enc' for c in CAT_COLS],
     'digit_decomp': [f'{c}_target_enc' for c in _digit_key_cols()],
+    'pair_interact_enc': [f'{c}_target_enc' for c in _pair_interact_cols()],
 }
 
 
@@ -305,6 +317,14 @@ def _add_digit_keys(df):
     return df
 
 
+def _add_pair_interact(df):
+    from itertools import combinations
+    for a, b in combinations(PAIR_INTERACT_COLS, 2):
+        if a in df.columns and b in df.columns:
+            df[f'{a}_x_{b}'] = df[a].astype(str) + '_' + df[b].astype(str)
+    return df
+
+
 def _add_cross(df, base_cols):
     present_flags = [c for c in RED_FLAGS if c in df.columns]
     if present_flags:
@@ -347,6 +367,7 @@ _BLOCK_FUNCS = {
     'rare_cat': _add_rare_cat,
     'group_agg': _add_group_agg,
     'digit_keys': _add_digit_keys,
+    'pair_interact': _add_pair_interact,
 }
 
 
@@ -366,7 +387,7 @@ def add_features(df: pd.DataFrame, blocks: list[str] | None = None) -> pd.DataFr
     return df
 
 
-ABLATION_BLOCKS = BLOCK_ORDER + ['target_enc', 'digit_decomp']
+ABLATION_BLOCKS = BLOCK_ORDER + ['target_enc', 'digit_decomp', 'pair_interact_enc']
 
 
 def add_target_encoding(train: pd.DataFrame, test: pd.DataFrame, folds: np.ndarray,

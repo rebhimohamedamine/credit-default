@@ -37,6 +37,11 @@ def build_features():
     # runs as a second OOF pass after the block pipeline rather than inside add_features.
     train_out, test_out = add_target_encoding(train_out, test_out, folds_df['fold'].values,
                                                FEATURE_BLOCKS['digit_keys'], smoothing=100.0)
+    # Pairwise categorical-combo keys (pair_interact block) are far less sparse (biggest
+    # combo is merchant_category x card_type = 60 groups over 700k rows), so the same
+    # smoothing as the single-column categorical target encoding above is enough.
+    train_out, test_out = add_target_encoding(train_out, test_out, folds_df['fold'].values,
+                                               FEATURE_BLOCKS['pair_interact'], smoothing=20.0)
 
     return train_out, test_out
 
