@@ -117,3 +117,31 @@ def test_filter_to_kept_blocks_keeps_columns_of_kept_blocks():
     out = filter_to_kept_blocks(df, kept_blocks=['stat2'])
     assert 'amount_sqrt' in out.columns
     assert 'amount_bin' in out.columns
+
+
+def test_cross_block_declares_all_its_group_stat_columns():
+    df = pd.DataFrame({
+        'merchant_category': ['a', 'b'],
+        'channel': ['x', 'y'],
+        'device_type': ['d1', 'd2'],
+        'card_type': ['c1', 'c2'],
+        'amount_usd': [10.0, 20.0],
+        'distance_from_home_km': [1.0, 2.0],
+        'velocity_score': [0.1, 0.2],
+        'merchant_risk_score': [0.5, 0.6],
+    })
+    out = add_features(df, blocks=['cross'])
+    added = set(out.columns) - set(df.columns)
+    undeclared = added - set(FEATURE_BLOCKS['cross'])
+    assert not undeclared, f'cross produced undeclared columns: {undeclared}'
+
+
+def test_cross_missing_count_ignores_id_and_is_fraud():
+    df = pd.DataFrame({
+        'id': [1, 2],
+        'is_fraud': [1.0, np.nan],  # row 2 simulates a test-set row concatenated with train
+        'amount_usd': [10.0, 20.0],
+    })
+    out = add_features(df, blocks=['cross'])
+    assert list(out['missing_count']) == [0, 0]
+    assert 'is_fraud_isna' not in out.columns

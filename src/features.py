@@ -24,6 +24,19 @@ def _group_agg_cols():
              for v in GROUP_AGG_VALUE_COLS for s in GROUP_AGG_STATS]
     return cols
 
+
+CROSS_GROUP_COLS = ['merchant_category', 'channel', 'device_type', 'card_type', 'age_bin']
+CROSS_VALUE_COLS = ['amount_usd', 'distance_from_home_km', 'velocity_score', 'merchant_risk_score']
+
+
+def _cross_group_stat_cols():
+    cols = []
+    for gcol in CROSS_GROUP_COLS:
+        for vcol in CROSS_VALUE_COLS:
+            cols += [f'{vcol}_rel_{gcol}', f'{vcol}_z_{gcol}']
+    return cols
+
+
 FEATURE_BLOCKS = {
     'amount': ['amount_log', 'amount_to_balance', 'balance_after', 'drains_account',
                'is_round_amount', 'small_amount_test', 'amount_vs_cat_mean', 'amount_z_in_cat'],
@@ -47,7 +60,7 @@ FEATURE_BLOCKS = {
     'stat2': ['amount_sqrt', 'amount_bin', 'distance_sqrt', 'distance_bin', 'hours_since_last_txn_sqrt'],
     'rare_cat': [f'{c}_rare' for c in CAT_COLS],
     'group_agg': _group_agg_cols(),
-    'cross': ['red_flag_count', 'red_flags_x_amount', 'missing_count', 'iso_score'],
+    'cross': ['red_flag_count', 'red_flags_x_amount', 'missing_count', 'iso_score'] + _cross_group_stat_cols(),
     'target_enc': [f'{c}_target_enc' for c in CAT_COLS],
 }
 
@@ -266,8 +279,8 @@ def _add_cross(df, base_cols):
         if df[col].isna().any():
             df[f'{col}_isna'] = df[col].isna().astype(int)
 
-    group_cols = [c for c in ['merchant_category', 'channel', 'device_type', 'card_type', 'age_bin'] if c in df.columns]
-    value_cols = [c for c in ['amount_usd', 'distance_from_home_km', 'velocity_score', 'merchant_risk_score'] if c in df.columns]
+    group_cols = [c for c in CROSS_GROUP_COLS if c in df.columns]
+    value_cols = [c for c in CROSS_VALUE_COLS if c in df.columns]
     for gcol in group_cols:
         for vcol in value_cols:
             g = df.groupby(gcol)[vcol]
@@ -303,7 +316,7 @@ def add_features(df: pd.DataFrame, blocks: list[str] | None = None) -> pd.DataFr
     if blocks is None:
         blocks = list(BLOCK_ORDER)
     blocks_set = set(blocks)
-    base_cols = list(df.columns)
+    base_cols = [c for c in df.columns if c not in {'id', 'is_fraud'}]
     df = df.copy()
     for name in BLOCK_ORDER:
         if name == 'cross':
