@@ -10,7 +10,7 @@ import pandas as pd
 
 from src.clean import CAT_COLS
 from src.features import (add_features, write_folds, BLOCK_ORDER, FEATURE_BLOCKS,
-                           ABLATION_BLOCKS, add_target_encoding)
+                           ABLATION_BLOCKS, add_target_encoding, filter_to_kept_blocks)
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / 'data'
@@ -32,11 +32,14 @@ def build_features():
     train_out = combined[combined['_is_test'] == 0].drop(columns=['_is_test']).reset_index(drop=True)
     test_out = combined[combined['_is_test'] == 1].drop(columns=['_is_test', 'is_fraud']).reset_index(drop=True)
 
+    return train_out, test_out
+
+
+def write_feature_parquets(train_out, test_out):
     train_out.to_parquet(DATA_DIR / 'train_features.parquet', index=False)
     test_out.to_parquet(DATA_DIR / 'test_features.parquet', index=False)
     print(f'Wrote {DATA_DIR / "train_features.parquet"} ({len(train_out)} rows, {train_out.shape[1]} cols)')
     print(f'Wrote {DATA_DIR / "test_features.parquet"} ({len(test_out)} rows, {test_out.shape[1]} cols)')
-    return train_out
 
 
 def _cv_auc_pr(X, y, folds, params=None):
@@ -71,6 +74,7 @@ def run_ablation(train_df):
                 not any(c in cols for cols in FEATURE_BLOCKS.values())]
 
     exp_rows = []
+    kept_blocks = []
 
     def log_experiment(exp_id, change, feature_cols, kept, start_time, aucs, prs):
         exp_rows.append({
@@ -93,6 +97,8 @@ def run_ablation(train_df):
         aucs, prs = _cv_auc_pr(_encode_for_lightgbm(train_df[feature_cols]), y, folds)
         delta = aucs - baseline_aucs
         kept = bool((delta > 0).sum() >= 4 and delta.mean() > 0)
+        if kept:
+            kept_blocks.append(block)
         log_experiment(f'block_{block}', f'add {block} block', feature_cols, kept, start, aucs, prs)
         print(f'{block}: AUC {aucs.mean():.4f} (delta {delta.mean():+.5f}), kept={kept}')
 
@@ -102,6 +108,7 @@ def run_ablation(train_df):
         exp_df = pd.concat([pd.read_csv(exp_path), exp_df], ignore_index=True)
     exp_df.to_csv(exp_path, index=False)
     print(f'Wrote {exp_path}')
+    return kept_blocks
 
 
 def main():
@@ -109,9 +116,16 @@ def main():
     parser.add_argument('--ablate', action='store_true')
     args = parser.parse_args()
 
-    train_out = build_features()
+    train_out, test_out = build_features()
     if args.ablate:
-        run_ablation(train_out)
+        kept_blocks = run_ablation(train_out)
+        dropped_blocks = [b for b in ABLATION_BLOCKS if b not in kept_blocks]
+        if dropped_blocks:
+            print(f'Dropping blocks that failed the ablation gate: {dropped_blocks}')
+        train_out = filter_to_kept_blocks(train_out, kept_blocks)
+        test_out = filter_to_kept_blocks(test_out, kept_blocks)
+
+    write_feature_parquets(train_out, test_out)
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from src.features import add_features, add_target_encoding, FEATURE_BLOCKS
+from src.features import add_features, add_target_encoding, filter_to_kept_blocks, FEATURE_BLOCKS
 
 
 def test_amount_to_balance_handles_zero_and_negative_balance():
@@ -102,3 +102,18 @@ def test_add_target_encoding_unseen_test_category_falls_back_to_global_mean():
     folds = np.array([0, 1, 0, 1])
     _, test_out = add_target_encoding(train, test, folds, cat_cols=['cat'], smoothing=0.0)
     assert test_out['cat_target_enc'].iloc[0] == train['is_fraud'].mean()
+
+
+def test_filter_to_kept_blocks_drops_columns_of_blocks_not_kept():
+    df = pd.DataFrame({'amount_usd': [1.0], 'amount_sqrt': [1.0], 'amount_bin': [0]})
+    out = filter_to_kept_blocks(df, kept_blocks=[])
+    assert 'amount_sqrt' not in out.columns
+    assert 'amount_bin' not in out.columns
+    assert 'amount_usd' in out.columns  # raw column, not part of any block, always kept
+
+
+def test_filter_to_kept_blocks_keeps_columns_of_kept_blocks():
+    df = pd.DataFrame({'amount_sqrt': [1.0], 'amount_bin': [0]})
+    out = filter_to_kept_blocks(df, kept_blocks=['stat2'])
+    assert 'amount_sqrt' in out.columns
+    assert 'amount_bin' in out.columns

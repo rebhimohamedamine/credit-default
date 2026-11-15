@@ -346,6 +346,12 @@ def add_target_encoding(train: pd.DataFrame, test: pd.DataFrame, folds: np.ndarr
     return train, test
 
 
+def filter_to_kept_blocks(df: pd.DataFrame, kept_blocks: list[str]) -> pd.DataFrame:
+    drop_cols = [c for block, cols in FEATURE_BLOCKS.items()
+                 if block not in kept_blocks for c in cols if c in df.columns]
+    return df.drop(columns=drop_cols)
+
+
 def add_polynomial_features(df: pd.DataFrame, top_features: list[str]) -> pd.DataFrame:
     from itertools import combinations
     df = df.copy()
