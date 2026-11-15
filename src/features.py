@@ -11,7 +11,21 @@ REMOTE_CHANNELS = ['Online', 'In-App']
 STRONG_AUTH = ['3D Secure', 'OTP']
 
 BLOCK_ORDER = ['amount', 'velocity', 'location', 'auth', 'device', 'merchant', 'profile', 'time', 'scam',
-               'stat2', 'rare_cat', 'group_agg', 'cross']
+               'stat2', 'rare_cat', 'group_agg', 'digit_keys', 'cross']
+
+# This dataset (Kaggle Playground S6E11) is synthetically generated and quantized to
+# <=2 decimal places, leaving decimal-digit frequency spikes that plain thresholds on the
+# raw value can't isolate (digit-prefix target encoding is the one technique independent
+# write-ups on this exact competition found to reliably beat baseline; see conversation).
+DIGIT_DECOMP_COLS = ['amount_usd', 'merchant_risk_score', 'velocity_score',
+                     'distance_from_home_km', 'account_balance_usd']
+
+
+def _digit_key_cols():
+    cols = []
+    for col in DIGIT_DECOMP_COLS:
+        cols += [f'{col}_cents', f'{col}_tenths', f'{col}_leading_digit']
+    return cols
 
 GROUP_AGG_GROUP_COLS = ['merchant_category', 'channel', 'device_type', 'card_type', 'age_bin']
 GROUP_AGG_VALUE_COLS = ['amount_usd', 'velocity_score']
@@ -60,8 +74,10 @@ FEATURE_BLOCKS = {
     'stat2': ['amount_sqrt', 'amount_bin', 'distance_sqrt', 'distance_bin', 'hours_since_last_txn_sqrt'],
     'rare_cat': [f'{c}_rare' for c in CAT_COLS],
     'group_agg': _group_agg_cols(),
+    'digit_keys': _digit_key_cols(),
     'cross': ['red_flag_count', 'red_flags_x_amount', 'missing_count', 'iso_score'] + _cross_group_stat_cols(),
     'target_enc': [f'{c}_target_enc' for c in CAT_COLS],
+    'digit_decomp': [f'{c}_target_enc' for c in _digit_key_cols()],
 }
 
 
@@ -268,6 +284,27 @@ def _add_group_agg(df):
     return df
 
 
+def _leading_digit(s):
+    abs_s = s.abs()
+    nonzero = abs_s > 0
+    safe = abs_s.where(nonzero, 1.0)
+    exponent = np.floor(np.log10(safe) + 1e-9)
+    leading = np.floor(safe / (10 ** exponent) + 1e-9)
+    leading = leading.where(nonzero, 0)
+    return leading.mask(abs_s.isna())
+
+
+def _add_digit_keys(df):
+    for col in DIGIT_DECOMP_COLS:
+        if col not in df.columns:
+            continue
+        cents = (df[col].abs() * 100).round() % 100
+        df[f'{col}_cents'] = cents
+        df[f'{col}_tenths'] = cents // 10
+        df[f'{col}_leading_digit'] = _leading_digit(df[col])
+    return df
+
+
 def _add_cross(df, base_cols):
     present_flags = [c for c in RED_FLAGS if c in df.columns]
     if present_flags:
@@ -309,6 +346,7 @@ _BLOCK_FUNCS = {
     'stat2': _add_stat2,
     'rare_cat': _add_rare_cat,
     'group_agg': _add_group_agg,
+    'digit_keys': _add_digit_keys,
 }
 
 
@@ -328,7 +366,7 @@ def add_features(df: pd.DataFrame, blocks: list[str] | None = None) -> pd.DataFr
     return df
 
 
-ABLATION_BLOCKS = BLOCK_ORDER + ['target_enc']
+ABLATION_BLOCKS = BLOCK_ORDER + ['target_enc', 'digit_decomp']
 
 
 def add_target_encoding(train: pd.DataFrame, test: pd.DataFrame, folds: np.ndarray,

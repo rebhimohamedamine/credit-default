@@ -136,6 +136,27 @@ def test_cross_block_declares_all_its_group_stat_columns():
     assert not undeclared, f'cross produced undeclared columns: {undeclared}'
 
 
+def test_digit_keys_extract_cents_tenths_and_leading_digit():
+    df = pd.DataFrame({'amount_usd': [42.86, 7.05, 0.0, -12.34]})
+    out = add_features(df, blocks=['digit_keys'])
+    assert list(out['amount_usd_cents']) == [86, 5, 0, 34]
+    assert list(out['amount_usd_tenths']) == [8, 0, 0, 3]
+    assert list(out['amount_usd_leading_digit']) == [4, 7, 0, 1]
+
+
+def test_digit_keys_only_adds_declared_columns():
+    df = pd.DataFrame({'amount_usd': [42.86], 'merchant_risk_score': [0.5]})
+    out = add_features(df, blocks=['digit_keys'])
+    added = set(out.columns) - set(df.columns)
+    assert added == set(FEATURE_BLOCKS['digit_keys']) & added
+    assert 'amount_usd_cents' in added and 'merchant_risk_score_cents' in added
+
+
+def test_digit_decomp_target_enc_columns_are_declared_for_every_digit_key():
+    from src.features import _digit_key_cols
+    assert FEATURE_BLOCKS['digit_decomp'] == [f'{c}_target_enc' for c in _digit_key_cols()]
+
+
 def test_cross_missing_count_ignores_id_and_is_fraud():
     df = pd.DataFrame({
         'id': [1, 2],
