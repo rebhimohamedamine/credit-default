@@ -48,6 +48,7 @@ FEATURE_BLOCKS = {
     'rare_cat': [f'{c}_rare' for c in CAT_COLS],
     'group_agg': _group_agg_cols(),
     'cross': ['red_flag_count', 'red_flags_x_amount', 'missing_count', 'iso_score'],
+    'target_enc': [f'{c}_target_enc' for c in CAT_COLS],
 }
 
 
@@ -312,6 +313,37 @@ def add_features(df: pd.DataFrame, blocks: list[str] | None = None) -> pd.DataFr
     if 'cross' in blocks_set:
         df = _add_cross(df, base_cols)
     return df
+
+
+ABLATION_BLOCKS = BLOCK_ORDER + ['target_enc']
+
+
+def add_target_encoding(train: pd.DataFrame, test: pd.DataFrame, folds: np.ndarray,
+                         cat_cols: list[str], target_col: str = 'is_fraud',
+                         smoothing: float = 20.0) -> tuple[pd.DataFrame, pd.DataFrame]:
+    train = train.copy()
+    test = test.copy()
+    global_mean = train[target_col].mean()
+
+    for col in cat_cols:
+        if col not in train.columns:
+            continue
+
+        oof = np.full(len(train), np.nan)
+        for fold in np.unique(folds):
+            tr_mask = folds != fold
+            va_mask = folds == fold
+            stats = train.loc[tr_mask].groupby(col)[target_col].agg(['mean', 'count'])
+            smoothed = (stats['mean'] * stats['count'] + global_mean * smoothing) / (stats['count'] + smoothing)
+            oof[va_mask] = train.loc[va_mask, col].map(smoothed).fillna(global_mean).to_numpy()
+        train[f'{col}_target_enc'] = oof
+
+        full_stats = train.groupby(col)[target_col].agg(['mean', 'count'])
+        full_smoothed = (full_stats['mean'] * full_stats['count'] + global_mean * smoothing) / (full_stats['count'] + smoothing)
+        if col in test.columns:
+            test[f'{col}_target_enc'] = test[col].map(full_smoothed).fillna(global_mean)
+
+    return train, test
 
 
 def add_polynomial_features(df: pd.DataFrame, top_features: list[str]) -> pd.DataFrame:

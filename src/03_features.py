@@ -8,7 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import numpy as np
 import pandas as pd
 
-from src.features import add_features, write_folds, BLOCK_ORDER, FEATURE_BLOCKS
+from src.clean import CAT_COLS
+from src.features import (add_features, write_folds, BLOCK_ORDER, FEATURE_BLOCKS,
+                           ABLATION_BLOCKS, add_target_encoding)
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / 'data'
@@ -18,7 +20,8 @@ def build_features():
     train = pd.read_parquet(DATA_DIR / 'train_clean.parquet')
     test = pd.read_parquet(DATA_DIR / 'test_clean.parquet')
 
-    write_folds(train, path=str(ROOT / 'folds.csv'))
+    folds_df = write_folds(train, path=str(ROOT / 'folds.csv'))
+    train, test = add_target_encoding(train, test, folds_df['fold'].values, CAT_COLS)
 
     train = train.assign(_is_test=0)
     test = test.assign(_is_test=1, is_fraud=np.nan)
@@ -81,7 +84,7 @@ def run_ablation(train_df):
     log_experiment('baseline', 'raw cleaned columns only', raw_cols, True, start, baseline_aucs, baseline_prs)
     print(f'baseline AUC {baseline_aucs.mean():.4f} +- {baseline_aucs.std():.4f}')
 
-    for block in BLOCK_ORDER:
+    for block in ABLATION_BLOCKS:
         block_cols = [c for c in FEATURE_BLOCKS[block] if c in train_df.columns]
         if not block_cols:
             continue

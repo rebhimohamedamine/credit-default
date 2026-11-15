@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from src.features import add_features, FEATURE_BLOCKS
+from src.features import add_features, add_target_encoding, FEATURE_BLOCKS
 
 
 def test_amount_to_balance_handles_zero_and_negative_balance():
@@ -82,3 +82,23 @@ def test_group_agg_count_and_stats_per_group():
     assert list(out['amount_usd_median_channel']) == [20.0, 20.0, 20.0, 6.0, 6.0]
     assert list(out['amount_usd_min_channel']) == [10.0, 10.0, 10.0, 5.0, 5.0]
     assert list(out['amount_usd_max_channel']) == [30.0, 30.0, 30.0, 7.0, 7.0]
+
+
+def test_add_target_encoding_oof_excludes_own_fold():
+    train = pd.DataFrame({
+        'cat': ['a', 'a', 'a', 'b', 'b', 'b'],
+        'is_fraud': [1, 1, 0, 0, 0, 1],
+    })
+    test = pd.DataFrame({'cat': ['a', 'b']})
+    folds = np.array([0, 0, 1, 0, 1, 1])
+    train_out, _ = add_target_encoding(train, test, folds, cat_cols=['cat'], smoothing=0.0)
+    assert train_out.loc[2, 'cat_target_enc'] == 1.0   # fold-1 'a' row encoded from fold-0 'a' rows only (mean 1.0)
+    assert train_out.loc[3, 'cat_target_enc'] == 0.5   # fold-0 'b' row encoded from fold-1 'b' rows only (mean 0.5)
+
+
+def test_add_target_encoding_unseen_test_category_falls_back_to_global_mean():
+    train = pd.DataFrame({'cat': ['a', 'a', 'b', 'b'], 'is_fraud': [1, 0, 0, 0]})
+    test = pd.DataFrame({'cat': ['unseen']})
+    folds = np.array([0, 1, 0, 1])
+    _, test_out = add_target_encoding(train, test, folds, cat_cols=['cat'], smoothing=0.0)
+    assert test_out['cat_target_enc'].iloc[0] == train['is_fraud'].mean()
