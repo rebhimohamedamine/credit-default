@@ -8,3 +8,5 @@ test_preds/*.npy
 *.egg-info/
 .ipynb_checkpoints/
 catboost_info/
+experiments.csv
+folds.csv
