@@ -8,7 +8,8 @@ RED_FLAGS = [
 REMOTE_CHANNELS = ['Online', 'In-App']
 STRONG_AUTH = ['3D Secure', 'OTP']
 
-BLOCK_ORDER = ['amount', 'velocity', 'location', 'auth', 'device', 'merchant', 'profile', 'time', 'scam', 'cross']
+BLOCK_ORDER = ['amount', 'velocity', 'location', 'auth', 'device', 'merchant', 'profile', 'time', 'scam',
+               'stat2', 'cross']
 
 FEATURE_BLOCKS = {
     'amount': ['amount_log', 'amount_to_balance', 'balance_after', 'drains_account',
@@ -30,6 +31,7 @@ FEATURE_BLOCKS = {
              'night_x_foreign', 'night_x_amount', 'night_x_remote'],
     'scam': ['scam_x_newmerchant', 'scam_x_amount', 'scam_with_strong_auth',
              'scam_x_ship_mismatch', 'ship_mismatch_remote_new'],
+    'stat2': ['amount_sqrt', 'amount_bin', 'distance_sqrt', 'distance_bin', 'hours_since_last_txn_sqrt'],
     'cross': ['red_flag_count', 'red_flags_x_amount', 'missing_count', 'iso_score'],
 }
 
@@ -203,6 +205,18 @@ def _add_scam(df):
     return df
 
 
+def _add_stat2(df):
+    if 'amount_usd' in df.columns:
+        df['amount_sqrt'] = np.sqrt(df['amount_usd'].clip(lower=0))
+        df['amount_bin'] = pd.qcut(df['amount_usd'], 10, labels=False, duplicates='drop')
+    if 'distance_from_home_km' in df.columns:
+        df['distance_sqrt'] = np.sqrt(df['distance_from_home_km'].clip(lower=0))
+        df['distance_bin'] = pd.qcut(df['distance_from_home_km'], 10, labels=False, duplicates='drop')
+    if 'hours_since_last_txn' in df.columns:
+        df['hours_since_last_txn_sqrt'] = np.sqrt(df['hours_since_last_txn'].clip(lower=0))
+    return df
+
+
 def _add_cross(df, base_cols):
     present_flags = [c for c in RED_FLAGS if c in df.columns]
     if present_flags:
@@ -241,6 +255,7 @@ _BLOCK_FUNCS = {
     'profile': _add_profile,
     'time': _add_time,
     'scam': _add_scam,
+    'stat2': _add_stat2,
 }
 
 

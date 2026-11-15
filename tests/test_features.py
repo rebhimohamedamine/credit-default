@@ -24,3 +24,25 @@ def test_add_features_block_selection_only_adds_requested_columns():
     out = add_features(df, blocks=['amount'])
     for col in FEATURE_BLOCKS['velocity']:
         assert col not in out.columns
+
+
+def test_stat2_sqrt_transforms_and_bins():
+    df = pd.DataFrame({
+        'amount_usd': [4.0, 9.0, 16.0],
+        'distance_from_home_km': [16.0, 25.0, 36.0],
+        'hours_since_last_txn': [1.0, 4.0, 9.0],
+    })
+    out = add_features(df, blocks=['stat2'])
+    assert list(out['amount_sqrt']) == [2.0, 3.0, 4.0]
+    assert list(out['distance_sqrt']) == [4.0, 5.0, 6.0]
+    assert list(out['hours_since_last_txn_sqrt']) == [1.0, 2.0, 3.0]
+    assert out['amount_bin'].notna().all()
+    assert out['distance_bin'].notna().all()
+
+
+def test_stat2_bins_tolerate_heavily_duplicated_values():
+    # 97 rows share the same amount, which would make plain pd.qcut(..., 10) raise on
+    # duplicate bin edges without duplicates='drop'.
+    df = pd.DataFrame({'amount_usd': [5.0] * 97 + [10.0, 20.0, 30.0]})
+    out = add_features(df, blocks=['stat2'])
+    assert out['amount_bin'].notna().all()
