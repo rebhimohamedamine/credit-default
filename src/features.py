@@ -11,7 +11,14 @@ REMOTE_CHANNELS = ['Online', 'In-App']
 STRONG_AUTH = ['3D Secure', 'OTP']
 
 BLOCK_ORDER = ['amount', 'velocity', 'location', 'auth', 'device', 'merchant', 'profile', 'time', 'scam',
-               'stat2', 'rare_cat', 'group_agg', 'digit_keys', 'pair_interact', 'cross']
+               'stat2', 'rare_cat', 'group_agg', 'digit_keys', 'pair_interact', 'risk_bin', 'cross']
+
+# cvv_retry_count's exact value is a strong, non-monotonic fraud signal in this dataset
+# (0 -> 0.9% fraud, 1 -> 8.8%, 2 -> 41.7%, 3 -> 36.0%, measured directly on train_clean.parquet)
+# and merchant_risk_score is continuous with ~950 distinct values -- both worth a smoothed,
+# OOF target-encoded representation under the ablation harness's tight 8-leaf budget, where
+# every split spent discovering this relationship from raw competes with everything else.
+RISK_ENC_COLS = ['cvv_retry_count', 'merchant_risk_bin50']
 
 # The 4 low-cardinality columns a public write-up on this exact competition (PCCF) used for
 # a small, targeted set of pairwise categorical interactions -- distinct from the 75 broad
@@ -86,10 +93,12 @@ FEATURE_BLOCKS = {
     'group_agg': _group_agg_cols(),
     'digit_keys': _digit_key_cols(),
     'pair_interact': _pair_interact_cols(),
+    'risk_bin': ['merchant_risk_bin50'],
     'cross': ['red_flag_count', 'red_flags_x_amount', 'missing_count', 'iso_score'] + _cross_group_stat_cols(),
     'target_enc': [f'{c}_target_enc' for c in CAT_COLS],
     'digit_decomp': [f'{c}_target_enc' for c in _digit_key_cols()],
     'pair_interact_enc': [f'{c}_target_enc' for c in _pair_interact_cols()],
+    'risk_enc': [f'{c}_target_enc' for c in RISK_ENC_COLS],
 }
 
 
@@ -325,6 +334,13 @@ def _add_pair_interact(df):
     return df
 
 
+def _add_risk_bin(df):
+    if 'merchant_risk_score' not in df.columns:
+        return df
+    df['merchant_risk_bin50'] = pd.qcut(df['merchant_risk_score'], 50, labels=False, duplicates='drop')
+    return df
+
+
 def _add_cross(df, base_cols):
     present_flags = [c for c in RED_FLAGS if c in df.columns]
     if present_flags:
@@ -368,6 +384,7 @@ _BLOCK_FUNCS = {
     'group_agg': _add_group_agg,
     'digit_keys': _add_digit_keys,
     'pair_interact': _add_pair_interact,
+    'risk_bin': _add_risk_bin,
 }
 
 
@@ -387,7 +404,7 @@ def add_features(df: pd.DataFrame, blocks: list[str] | None = None) -> pd.DataFr
     return df
 
 
-ABLATION_BLOCKS = BLOCK_ORDER + ['target_enc', 'digit_decomp', 'pair_interact_enc']
+ABLATION_BLOCKS = BLOCK_ORDER + ['target_enc', 'digit_decomp', 'pair_interact_enc', 'risk_enc']
 
 
 def add_target_encoding(train: pd.DataFrame, test: pd.DataFrame, folds: np.ndarray,

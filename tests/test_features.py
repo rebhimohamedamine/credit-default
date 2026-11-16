@@ -176,6 +176,17 @@ def test_pair_interact_enc_target_enc_columns_are_declared_for_every_pair_key():
     assert FEATURE_BLOCKS['pair_interact_enc'] == [f'{c}_target_enc' for c in _pair_interact_cols()]
 
 
+def test_risk_bin_creates_fifty_quantile_bins_of_merchant_risk_score():
+    df = pd.DataFrame({'merchant_risk_score': list(range(200))})
+    out = add_features(df, blocks=['risk_bin'])
+    assert out['merchant_risk_bin50'].notna().all()
+    assert out['merchant_risk_bin50'].nunique() <= 50
+
+
+def test_risk_enc_target_enc_columns_are_declared_for_cvv_and_risk_bin():
+    assert FEATURE_BLOCKS['risk_enc'] == ['cvv_retry_count_target_enc', 'merchant_risk_bin50_target_enc']
+
+
 def test_cross_missing_count_ignores_id_and_is_fraud():
     df = pd.DataFrame({
         'id': [1, 2],

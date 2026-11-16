@@ -10,7 +10,8 @@ import pandas as pd
 
 from src.clean import CAT_COLS
 from src.features import (add_features, write_folds, BLOCK_ORDER, FEATURE_BLOCKS,
-                           ABLATION_BLOCKS, add_target_encoding, filter_to_kept_blocks)
+                           ABLATION_BLOCKS, add_target_encoding, filter_to_kept_blocks,
+                           RISK_ENC_COLS)
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / 'data'
@@ -42,6 +43,11 @@ def build_features():
     # smoothing as the single-column categorical target encoding above is enough.
     train_out, test_out = add_target_encoding(train_out, test_out, folds_df['fold'].values,
                                                FEATURE_BLOCKS['pair_interact'], smoothing=20.0)
+    # cvv_retry_count and the finer merchant_risk_score bin (risk_bin block) both have ample
+    # per-group support (smallest cvv_retry_count group is still >20 rows, smallest
+    # merchant_risk_bin50 group is >12k rows), so the same smoothing is enough here too.
+    train_out, test_out = add_target_encoding(train_out, test_out, folds_df['fold'].values,
+                                               RISK_ENC_COLS, smoothing=20.0)
 
     return train_out, test_out
 
